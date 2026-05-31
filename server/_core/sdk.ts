@@ -17,6 +17,8 @@ import type {
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
+const isString = (value: unknown): value is string => typeof value === "string";
+const getSessionAppId = () => ENV.appId || "siply";
 
 export type SessionPayload = {
   openId: string;
@@ -152,7 +154,7 @@ class SDKServer {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
+        appId: getSessionAppId(),
         name: options.name || "",
       },
       options,
@@ -193,7 +195,7 @@ class SDKServer {
       });
       const { openId, appId, name } = payload as Record<string, unknown>;
 
-      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
+      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isString(name)) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
       }

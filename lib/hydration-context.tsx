@@ -2,14 +2,16 @@
  * Global hydration state context for managing containers, logs, and settings
  */
 
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, ReactNode, useMemo } from 'react';
 import { Container, LogEntry, UserSettings, DailyStats } from './types';
-import * as storage from './storage';
+import { trpc } from './trpc';
+import { useAuth } from '@/hooks/use-auth';
 
 interface HydrationState {
   containers: Container[];
   logs: LogEntry[];
   settings: UserSettings;
+  hasSettings: boolean;
   todayStats: DailyStats | null;
   isLoading: boolean;
 }
@@ -23,22 +25,44 @@ type HydrationAction =
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'DELETE_LOG'; payload: string }
   | { type: 'UNDO_LAST_LOG' }
-  | { type: 'SET_SETTINGS'; payload: UserSettings }
+  | { type: 'SET_SETTINGS'; payload: { settings: UserSettings; hasSettings: boolean } }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
   | { type: 'SET_TODAY_STATS'; payload: DailyStats }
   | { type: 'SET_LOADING'; payload: boolean };
 
+const DEFAULT_SETTINGS: UserSettings = {
+  daily_goal_ml: 3000,
+  unit_preference: 'ml',
+  theme: 'auto',
+  wake_time: null,
+  sleep_time: null,
+};
+
 const initialState: HydrationState = {
   containers: [],
   logs: [],
-  settings: {
-    daily_goal_ml: 3000,
-    unit_preference: 'ml',
-    theme: 'auto',
-  },
+  settings: DEFAULT_SETTINGS,
+  hasSettings: false,
   todayStats: null,
   isLoading: true,
 };
+
+function getTodayStats(logs: LogEntry[]): DailyStats {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  const entries = logs
+    .filter((log) => log.timestamp >= start.getTime() && log.timestamp < end.getTime())
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  return {
+    date: start.toISOString().split('T')[0],
+    total_ml: entries.reduce((sum, entry) => sum + entry.amount_ml, 0),
+    entries,
+  };
+}
 
 function hydrationReducer(state: HydrationState, action: HydrationAction): HydrationState {
   switch (action.type) {
@@ -59,7 +83,7 @@ function hydrationReducer(state: HydrationState, action: HydrationAction): Hydra
         containers: state.containers.filter(c => c.id !== action.payload),
       };
     case 'SET_LOGS':
-      return { ...state, logs: action.payload };
+      return { ...state, logs: action.payload, todayStats: getTodayStats(action.payload) };
     case 'ADD_LOG': {
       const newLogs = [...state.logs, action.payload];
       const todayStats = state.todayStats
@@ -99,9 +123,13 @@ function hydrationReducer(state: HydrationState, action: HydrationAction): Hydra
       return { ...state, logs: newLogs, todayStats };
     }
     case 'SET_SETTINGS':
-      return { ...state, settings: action.payload };
+      return {
+        ...state,
+        settings: action.payload.settings,
+        hasSettings: action.payload.hasSettings,
+      };
     case 'UPDATE_SETTINGS':
-      return { ...state, settings: { ...state.settings, ...action.payload } };
+      return { ...state, settings: { ...state.settings, ...action.payload }, hasSettings: true };
     case 'SET_TODAY_STATS':
       return { ...state, todayStats: action.payload };
     case 'SET_LOADING':
@@ -127,72 +155,118 @@ const HydrationContext = createContext<HydrationContextType | undefined>(undefin
 
 export function HydrationProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(hydrationReducer, initialState);
+  const { isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
 
-  // Load data on mount
+  const containersQuery = trpc.hydration.containers.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const logsQuery = trpc.hydration.logs.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const settingsQuery = trpc.hydration.settings.get.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  const upsertContainerMutation = trpc.hydration.containers.upsert.useMutation();
+  const deleteContainerMutation = trpc.hydration.containers.delete.useMutation();
+  const addLogMutation = trpc.hydration.logs.add.useMutation();
+  const deleteLogMutation = trpc.hydration.logs.delete.useMutation();
+  const updateSettingsMutation = trpc.hydration.settings.update.useMutation();
+
+  const isQueryLoading = useMemo(
+    () =>
+      isAuthenticated &&
+      (containersQuery.isLoading || logsQuery.isLoading || settingsQuery.isLoading),
+    [containersQuery.isLoading, isAuthenticated, logsQuery.isLoading, settingsQuery.isLoading],
+  );
+
   useEffect(() => {
-    async function loadData() {
-      dispatch({ type: 'SET_LOADING', payload: true });
-      try {
-        const [containers, logs, settings, todayStats] = await Promise.all([
-          storage.getContainers(),
-          storage.getLogs(),
-          storage.getSettings(),
-          storage.getTodayStats(),
-        ]);
-        dispatch({ type: 'SET_CONTAINERS', payload: containers });
-        dispatch({ type: 'SET_LOGS', payload: logs });
-        dispatch({ type: 'SET_SETTINGS', payload: settings });
-        dispatch({ type: 'SET_TODAY_STATS', payload: todayStats });
-      } catch (error) {
-        console.error('Error loading hydration data:', error);
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
+    if (!isAuthenticated) {
+      dispatch({ type: 'SET_CONTAINERS', payload: [] });
+      dispatch({ type: 'SET_LOGS', payload: [] });
+      dispatch({ type: 'SET_SETTINGS', payload: { settings: DEFAULT_SETTINGS, hasSettings: false } });
+      dispatch({ type: 'SET_LOADING', payload: false });
+      return;
     }
-    loadData();
-  }, []);
+
+    dispatch({ type: 'SET_LOADING', payload: isQueryLoading });
+  }, [isAuthenticated, isQueryLoading]);
+
+  useEffect(() => {
+    if (containersQuery.data) {
+      dispatch({ type: 'SET_CONTAINERS', payload: containersQuery.data });
+    }
+  }, [containersQuery.data]);
+
+  useEffect(() => {
+    if (logsQuery.data) {
+      dispatch({ type: 'SET_LOGS', payload: logsQuery.data });
+    }
+  }, [logsQuery.data]);
+
+  useEffect(() => {
+    if (settingsQuery.data !== undefined) {
+      dispatch({
+        type: 'SET_SETTINGS',
+        payload: {
+          settings: settingsQuery.data ? { ...DEFAULT_SETTINGS, ...settingsQuery.data } : DEFAULT_SETTINGS,
+          hasSettings: Boolean(settingsQuery.data),
+        },
+      });
+    }
+  }, [settingsQuery.data]);
 
   const addContainer = async (container: Container) => {
     dispatch({ type: 'ADD_CONTAINER', payload: container });
-    await storage.addContainer(container);
+    await upsertContainerMutation.mutateAsync(container);
+    await utils.hydration.containers.list.invalidate();
   };
 
   const updateContainer = async (id: string, updates: Partial<Container>) => {
+    const current = state.containers.find((container) => container.id === id);
+    if (!current) return;
+    const updated = { ...current, ...updates };
     dispatch({ type: 'UPDATE_CONTAINER', payload: { id, updates } });
-    await storage.updateContainer(id, updates);
+    await upsertContainerMutation.mutateAsync(updated);
+    await utils.hydration.containers.list.invalidate();
   };
 
   const deleteContainer = async (id: string) => {
     dispatch({ type: 'DELETE_CONTAINER', payload: id });
-    await storage.deleteContainer(id);
+    await deleteContainerMutation.mutateAsync({ id });
+    await utils.hydration.containers.list.invalidate();
   };
 
   const addLog = async (log: LogEntry) => {
     dispatch({ type: 'ADD_LOG', payload: log });
-    await storage.addLog(log);
+    await addLogMutation.mutateAsync(log);
+    await utils.hydration.logs.list.invalidate();
   };
 
   const deleteLog = async (id: string) => {
     dispatch({ type: 'DELETE_LOG', payload: id });
-    await storage.deleteLog(id);
+    await deleteLogMutation.mutateAsync({ id });
+    await utils.hydration.logs.list.invalidate();
   };
 
   const undoLastLog = async () => {
     const lastLog = state.logs[state.logs.length - 1];
     if (lastLog) {
       dispatch({ type: 'UNDO_LAST_LOG' });
-      await storage.deleteLog(lastLog.id);
+      await deleteLogMutation.mutateAsync({ id: lastLog.id });
+      await utils.hydration.logs.list.invalidate();
     }
   };
 
   const updateSettings = async (settings: Partial<UserSettings>) => {
     dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
-    await storage.saveSettings(settings);
+    await updateSettingsMutation.mutateAsync(settings);
+    await utils.hydration.settings.get.invalidate();
   };
 
   const refreshTodayStats = async () => {
-    const todayStats = await storage.getTodayStats();
-    dispatch({ type: 'SET_TODAY_STATS', payload: todayStats });
+    dispatch({ type: 'SET_TODAY_STATS', payload: getTodayStats(state.logs) });
   };
 
   const value: HydrationContextType = {

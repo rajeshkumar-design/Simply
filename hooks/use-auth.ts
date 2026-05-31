@@ -7,11 +7,46 @@ type UseAuthOptions = {
   autoFetch?: boolean;
 };
 
+let globalUser: Auth.User | null = null;
+let globalLoading = true;
+const listeners = new Set<(user: Auth.User | null, loading: boolean) => void>();
+
+function publishAuth(user: Auth.User | null, loading = false) {
+  globalUser = user;
+  globalLoading = loading;
+  listeners.forEach((listener) => listener(globalUser, globalLoading));
+}
+
+export function setAuthenticatedUser(user: Auth.User | null) {
+  publishAuth(user, false);
+}
+
 export function useAuth(options?: UseAuthOptions) {
   const { autoFetch = true } = options ?? {};
-  const [user, setUser] = useState<Auth.User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUserState] = useState<Auth.User | null>(globalUser);
+  const [loading, setLoadingState] = useState(globalLoading);
   const [error, setError] = useState<Error | null>(null);
+
+  const setUser = useCallback((nextUser: Auth.User | null) => {
+    publishAuth(nextUser, false);
+  }, []);
+
+  const setLoading = useCallback((nextLoading: boolean) => {
+    globalLoading = nextLoading;
+    listeners.forEach((listener) => listener(globalUser, globalLoading));
+  }, []);
+
+  useEffect(() => {
+    const listener = (nextUser: Auth.User | null, nextLoading: boolean) => {
+      setUserState(nextUser);
+      setLoadingState(nextLoading);
+    };
+    listeners.add(listener);
+    listener(globalUser, globalLoading);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
 
   const fetchUser = useCallback(async () => {
     console.log("[useAuth] fetchUser called");

@@ -2,9 +2,18 @@ import { Platform } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "./auth";
 
-type ApiResponse<T> = {
-  data?: T;
-  error?: string;
+export type AuthUserResponse = {
+  id: number;
+  openId: string;
+  name: string | null;
+  email: string | null;
+  loginMethod: string | null;
+  lastSignedIn: string;
+};
+
+export type AuthResponse = {
+  app_session_id: string;
+  user: AuthUserResponse;
 };
 
 export async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -120,6 +129,20 @@ export async function exchangeOAuthCode(
 export async function logout(): Promise<void> {
   await apiCall<void>("/api/auth/logout", {
     method: "POST",
+  });
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  return apiCall<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function register(email: string, password: string, name: string): Promise<AuthResponse> {
+  return apiCall<AuthResponse>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, password, name }),
   });
 }
 

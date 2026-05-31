@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: siply-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: EXPO_WEB_PREVIEW_URL
+        sync: false

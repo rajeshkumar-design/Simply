@@ -1,265 +1,155 @@
-import { ScrollView, Text, View, Pressable, FlatList, ActivityIndicator } from "react-native";
-import { useEffect, useState } from "react";
-import { ScreenContainer } from "@/components/screen-container";
-import { useHydration } from "@/lib/hydration-context";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useColors } from "@/hooks/use-colors";
-import * as Haptics from "expo-haptics";
-import { v4 as uuidv4 } from "uuid";
-import { Container, LogEntry } from "@/lib/types";
+import { View, Text, Pressable, ActivityIndicator, useWindowDimensions, Platform } from 'react-native';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useHydration } from '@/lib/hydration-context';
+import { useLogFeedback } from '@/hooks/use-log-feedback';
+import { WaveIllustration, FloatingNav, ToastBanner, LogSheet, WebHomePanel } from '@/components/hydration';
+import { MIcon } from '@/components/ui/MIcon';
+import { useColors } from '@/hooks/use-colors';
+import { createId } from '@/lib/id';
+import type { Container, LogEntry } from '@/lib/types';
 
-/**
- * Home Screen - Water Tracking Dashboard
- * 
- * Displays:
- * - Today's date and header
- * - Progress ring showing goal completion
- * - Remaining water amount
- * - Quick-add container cards
- * - Today's timeline with logged entries
- */
 export default function HomeScreen() {
+  const router = useRouter();
   const colors = useColors();
-  const { state, addLog, deleteLog, undoLastLog } = useHydration();
-  const [showUndoButton, setShowUndoButton] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const { state, addLog, addContainer, deleteLog, undoLastLog } = useHydration();
+  const { toast, dismissToast, onLogSuccess, onUndo } = useLogFeedback();
+  const [logSheetVisible, setLogSheetVisible] = useState(false);
 
   const { todayStats, settings, containers, isLoading } = state;
   const totalToday = todayStats?.total_ml ?? 0;
   const dailyGoal = settings.daily_goal_ml;
-  const remaining = Math.max(0, dailyGoal - totalToday);
-  const progress = Math.min(1, totalToday / dailyGoal);
+  const progress = dailyGoal > 0 ? Math.min(1, totalToday / dailyGoal) : 0;
   const entries = todayStats?.entries ?? [];
 
-  // Show undo button if there are entries
-  useEffect(() => {
-    setShowUndoButton(entries.length > 0);
-  }, [entries.length]);
-
-  const handleContainerTap = async (container: Container) => {
-    // Haptic feedback
-    if (container) {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    // Create log entry
+  const logWater = async (containerId: string, amountMl: number) => {
     const logEntry: LogEntry = {
-      id: uuidv4(),
-      container_id: container.id,
-      amount_ml: container.capacity_ml,
+      id: createId('log'),
+      container_id: containerId,
+      amount_ml: amountMl,
       timestamp: Date.now(),
     };
-
     await addLog(logEntry);
+    await onLogSuccess(totalToday, amountMl, dailyGoal);
   };
 
-  const handleDeleteEntry = async (entryId: string) => {
-    await deleteLog(entryId);
+  const handleCreateAndLog = async (container: Container, amountMl: number) => {
+    await addContainer(container);
+    await logWater(container.id, amountMl);
   };
 
   const handleUndo = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await undoLastLog();
-  };
-
-  const formatTime = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
-  };
-
-  const formatAmount = (ml: number): string => {
-    if (settings.unit_preference === "oz") {
-      const oz = (ml / 29.5735).toFixed(1);
-      return `${oz} oz`;
-    }
-    return `${ml} ml`;
-  };
-
-  const getContainerName = (containerId: string): string => {
-    const container = containers.find(c => c.id === containerId);
-    return container ? container.name : "Unknown";
-  };
-
-  const getContainerEmoji = (containerId: string): string => {
-    const container = containers.find(c => c.id === containerId);
-    return container?.emoji ?? "🥤";
+    await onUndo();
   };
 
   if (isLoading) {
     return (
-      <ScreenContainer className="items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
-      </ScreenContainer>
+      <View className="flex-1 items-center justify-center bg-sky">
+        <ActivityIndicator size="large" color={colors.oceanDeep} />
+      </View>
+    );
+  }
+
+  if (Platform.OS === 'web') {
+    const leftWidth = Math.max(420, Math.round(width * 0.62));
+    return (
+      <View className="flex-1 flex-row bg-sky">
+        <ToastBanner toast={toast} onDismiss={dismissToast} />
+        <View className="relative overflow-hidden" style={{ width: leftWidth }}>
+          <WaveIllustration progress={progress} width={leftWidth} height={height} />
+          <View className="absolute inset-0 items-center justify-center px-10">
+            <Text
+              className="text-6xl font-extrabold text-foreground text-center"
+              style={{ letterSpacing: -1.2 }}
+            >
+              {Math.round(totalToday)}
+              <Text className="text-4xl font-bold text-foreground">/{Math.round(dailyGoal)}ml</Text>
+            </Text>
+            <Text className="text-lg font-semibold mt-4 text-muted">Waves</Text>
+          </View>
+        </View>
+        <WebHomePanel
+          containers={containers}
+          entries={entries}
+          unit={settings.unit_preference}
+          onConfirm={logWater}
+          onCreateAndLog={handleCreateAndLog}
+          onDeleteLog={deleteLog}
+          onSettings={() => router.push('/(tabs)/settings')}
+          onHistory={() => router.push('/(tabs)/analytics')}
+        />
+      </View>
     );
   }
 
   return (
-    <ScreenContainer className="p-4">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-        <View className="gap-6">
-          {/* Header */}
-          <View className="gap-1">
-            <Text className="text-sm text-muted">Today</Text>
-            <Text className="text-2xl font-bold text-foreground">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
-            </Text>
-          </View>
+    <View className="flex-1 bg-sky">
+      <WaveIllustration progress={progress} width={width} height={height} />
 
-          {/* Progress Ring and Stats */}
-          <View className="bg-surface rounded-3xl p-6 gap-4 items-center">
-            {/* Progress Ring (Simple Circle) */}
-            <View className="w-32 h-32 rounded-full border-4 items-center justify-center" style={{ borderColor: colors.primary }}>
-              <View className="absolute w-32 h-32 rounded-full" style={{
-                backgroundColor: colors.primary,
-                opacity: progress * 0.1,
-              }} />
-              <View className="items-center gap-1">
-                <Text className="text-3xl font-bold text-foreground">
-                  {(progress * 100).toFixed(0)}%
-                </Text>
-                <Text className="text-xs text-muted">of goal</Text>
-              </View>
-            </View>
+      <ToastBanner toast={toast} onDismiss={dismissToast} />
 
-            {/* Stats */}
-            <View className="w-full gap-2">
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">Total today</Text>
-                <Text className="text-lg font-semibold text-foreground">
-                  {formatAmount(totalToday)}
-                </Text>
-              </View>
-              <View className="flex-row justify-between">
-                <Text className="text-sm text-muted">Daily goal</Text>
-                <Text className="text-lg font-semibold text-foreground">
-                  {formatAmount(dailyGoal)}
-                </Text>
-              </View>
-              <View className="flex-row justify-between border-t border-border pt-2">
-                <Text className="text-sm text-muted">Remaining</Text>
-                <Text className="text-lg font-semibold" style={{ color: remaining === 0 ? colors.success : colors.primary }}>
-                  {formatAmount(remaining)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Undo Button */}
-            {showUndoButton && (
-              <Pressable
-                onPress={handleUndo}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.error,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-                className="w-full py-2 rounded-lg flex-row items-center justify-center gap-2"
-              >
-                <IconSymbol name="arrow.uturn.left" size={16} color="white" />
-                <Text className="text-sm font-semibold text-white">Undo last</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* Quick-Add Containers */}
-          {containers.length > 0 ? (
-            <View className="gap-2">
-              <Text className="text-sm font-semibold text-muted">Quick add</Text>
-              <FlatList
-                data={containers}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => handleContainerTap(item)}
-                    style={({ pressed }) => [
-                      {
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                        borderWidth: 1,
-                        opacity: pressed ? 0.7 : 1,
-                        transform: [{ scale: pressed ? 0.97 : 1 }],
-                      },
-                    ]}
-                    className="p-4 rounded-2xl flex-row items-center justify-between mb-2"
-                  >
-                    <View className="flex-row items-center gap-3 flex-1">
-                      <Text className="text-3xl">{item.emoji}</Text>
-                      <View className="flex-1">
-                        <Text className="text-base font-semibold text-foreground">
-                          {item.name}
-                        </Text>
-                        <Text className="text-xs text-muted">
-                          +{formatAmount(item.capacity_ml)}
-                        </Text>
-                      </View>
-                    </View>
-                    <IconSymbol name="plus" size={20} color={colors.primary} />
-                  </Pressable>
-                )}
-              />
-            </View>
-          ) : (
-            <View className="bg-surface rounded-2xl p-4 items-center gap-2">
-              <Text className="text-sm text-muted">No containers yet</Text>
-              <Text className="text-xs text-muted text-center">
-                Go to Containers tab to create your first bottle or cup
-              </Text>
-            </View>
-          )}
-
-          {/* Today's Timeline */}
+      <View className="flex-1" style={{ paddingTop: insets.top + 8 }}>
+        {/* Header */}
+        <View className="flex-row items-center justify-between px-5">
+          <Text className="text-lg font-bold text-foreground">Today</Text>
           {entries.length > 0 ? (
-            <View className="gap-2">
-              <Text className="text-sm font-semibold text-muted">Today's log</Text>
-              <FlatList
-                data={entries}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                renderItem={({ item }) => (
-                  <View className="bg-surface rounded-xl p-3 flex-row items-center justify-between mb-2 border border-border">
-                    <View className="flex-row items-center gap-3 flex-1">
-                      <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: colors.primary + "20" }}>
-                        <Text className="text-lg">{getContainerEmoji(item.container_id)}</Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-sm font-semibold text-foreground">
-                          {getContainerName(item.container_id)}
-                        </Text>
-                        <View className="flex-row items-center gap-2">
-                          <IconSymbol name="clock" size={12} color={colors.muted} />
-                          <Text className="text-xs text-muted">
-                            {formatTime(item.timestamp)}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View className="flex-row items-center gap-3">
-                      <Text className="text-sm font-semibold text-primary">
-                        +{formatAmount(item.amount_ml)}
-                      </Text>
-                      <Pressable
-                        onPress={() => handleDeleteEntry(item.id)}
-                        style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
-                      >
-                        <IconSymbol name="trash" size={18} color={colors.error} />
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
-              />
-            </View>
-          ) : (
-            <View className="bg-surface rounded-2xl p-4 items-center gap-2 mb-4">
-              <Text className="text-sm text-muted">No entries yet</Text>
-              <Text className="text-xs text-muted text-center">
-                Tap a container to log your first sip!
-              </Text>
-            </View>
-          )}
+            <Pressable
+              onPress={handleUndo}
+              hitSlop={10}
+              className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full"
+              style={({ pressed }) => ({
+                backgroundColor: 'rgba(255,255,255,0.5)',
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <MIcon name="undo" size={16} color={colors.foreground} />
+              <Text className="text-xs font-semibold text-foreground">Undo</Text>
+            </Pressable>
+          ) : null}
         </View>
-      </ScrollView>
-    </ScreenContainer>
+
+        {/* Hero intake */}
+        <Animated.View entering={FadeIn.duration(400)} className="items-center mt-16 px-6">
+          <Text className="text-5xl font-extrabold text-foreground text-center" style={{ letterSpacing: -1 }}>
+            {Math.round(totalToday)}
+            <Text className="text-3xl font-bold text-foreground">/{Math.round(dailyGoal)}ml</Text>
+          </Text>
+          <Text className="text-base font-medium mt-2" style={{ color: colors.foreground, opacity: 0.7 }}>
+            Water intake & your goal
+          </Text>
+          {progress >= 1 ? (
+            <View className="flex-row items-center gap-1.5 mt-3 px-4 py-1.5 rounded-full" style={{ backgroundColor: colors.success }}>
+              <MIcon name="check-circle" size={16} color="#FFFFFF" />
+              <Text className="text-sm font-bold text-white">Goal reached</Text>
+            </View>
+          ) : null}
+        </Animated.View>
+
+        <View className="flex-1" />
+
+        {/* Floating navigation */}
+        <View style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+          <FloatingNav
+            onSettings={() => router.push('/(tabs)/settings')}
+            onAddWater={() => setLogSheetVisible(true)}
+            onHistory={() => router.push('/(tabs)/analytics')}
+          />
+        </View>
+      </View>
+
+      <LogSheet
+        visible={logSheetVisible}
+        onClose={() => setLogSheetVisible(false)}
+        containers={containers}
+        unit={settings.unit_preference}
+        onConfirm={logWater}
+        onCreateAndLog={handleCreateAndLog}
+      />
+    </View>
   );
 }

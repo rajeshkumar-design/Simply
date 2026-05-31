@@ -1,173 +1,110 @@
 # Siply - Water Tracker App Design
 
 ## Overview
-Siply is a playful, one-tap water tracking mobile app designed for iOS and Android. The app helps users log water intake quickly using custom containers, track daily hydration goals, and view analytics across different time periods.
+Siply is a minimal, one-tap water tracking mobile app for iOS and Android. Users log water via custom containers, track daily goals, and review analytics. The UI follows a calm water palette with Reanimated micro-interactions (Me+-inspired logging flow).
 
 ## Design Philosophy
-- **Fast**: Main action (logging water) takes less than one second
-- **Effortless**: Minimal friction, intuitive interactions
-- **Satisfying**: Visual feedback and rewarding microcopy
-- **Playful**: Friendly, calm, and light aesthetic
-- **Clean**: Rounded cards, soft colors, simple typography
+- **Fast**: One-tap logging from horizontal quick-add chips
+- **Effortless**: Bottom sheets for custom amounts and container editing
+- **Satisfying**: Toast feedback, animated progress ring, haptics
+- **Minimal**: Hero metric, elevated cards, reduced borders
+- **Clean**: Rounded cards, soft blues, simple typography
 
 ## Screen List
 
 ### 1. Home Screen (Dashboard)
-**Purpose**: Main entry point showing today's hydration status and quick-add containers
-
-**Content & Layout**:
-- Header: "Today" title with date
-- Progress Ring: Visual representation of daily goal progress (e.g., 2.1L / 3L)
-- Remaining Amount: Large text showing "900ml left today"
-- Quick-Add Containers: Horizontal scrollable cards for each saved container (tap to log)
-- Today's Log: Vertical timeline of logged entries with timestamps and amounts
-- Action Buttons: Undo (on recent entry), Delete (on each log item)
-
-**Key Interactions**:
-- Tap container card → +amount added to total, animation plays, entry appears in timeline
-- Tap undo → removes last entry
-- Tap log item → delete option appears
-- Swipe or scroll to view full timeline
+- Header: "Today" + date
+- **HydrationHero**: SVG progress ring (animated fill) + large remaining amount or "Goal complete"
+- Secondary line: consumed / goal
+- Subtle "Undo last sip" link (not a full-width destructive button)
+- **ContainerQuickAdd**: Horizontal scroll chips (emoji, name, amount); dashed "Custom" opens log sheet
+- **LogTimeline**: Animated entries (fade/slide in), delete per row
+- **ToastBanner**: "Sip logged", "Goal completed!" after actions
 
 ### 2. Containers Screen
-**Purpose**: Manage custom drink containers
+- Two-column card grid with emoji, name, capacity, edit/delete
+- **ContainerFormSheet**: Bottom sheet (emoji grid, name, capacity stepper)
+- Toast on create/update/delete
 
-**Content & Layout**:
-- Header: "My Containers" with add button (+)
-- Container List: Cards showing each container with name, capacity, emoji/icon
-- Edit/Delete Options: Swipe or long-press to reveal actions
-
-**Key Interactions**:
-- Tap add button → modal to create new container
-- Enter name, capacity (ml), select emoji
-- Tap edit → modify existing container
-- Tap delete → confirm and remove
-
-### 3. Analytics Screen
-**Purpose**: View hydration history and trends
-
-**Content & Layout**:
-- Time Period Tabs: Day, Week, Month, Year
-- Chart/Visualization: Bar chart for daily intake, trend lines, or consistency view
-- Summary Stats: Total intake, average, goal completion rate
-- Date Navigation: Arrows to move between periods
-
-**Key Interactions**:
-- Tap tab to switch time period
-- Tap date to jump to specific day
-- Swipe to navigate between periods
+### 3. Analytics Screen (tab: Stats)
+- **SegmentedControl**: Day / Week / Month / Year
+- **AnimatedBarChart**: Spring-animated bars, goal color coding
+- **StatCard** summary rows
+- Day view: entry list
 
 ### 4. Settings Screen
-**Purpose**: Configure app preferences
-
-**Content & Layout**:
-- Daily Goal: Slider or input field to set goal (e.g., 2L, 2.5L, 3L, custom)
-- Unit Preference: Toggle between ml and oz
-- Theme: Light/Dark mode toggle
-- About: App version and credits
-
-**Key Interactions**:
-- Adjust goal → saves automatically
-- Toggle units → updates all displays
-- Toggle theme → immediate visual change
+- **SettingsSection** groups: Daily goal (presets + custom ml), Units (segmented ml/oz), Appearance (segmented light/dark), About
+- Tip card at bottom
 
 ## Primary User Flows
 
 ### Flow 1: Log Water (Main Action)
-1. User opens app → Home screen
-2. User taps container card (e.g., "Mug +300ml")
-3. Amount added to daily total
-4. Animation confirms action
-5. Entry appears in timeline with timestamp
-6. Progress ring updates
-
-**Time to complete**: < 1 second
+1. Open app → Home
+2. Tap quick-add chip OR Custom → LogSheet → confirm amount
+3. Ring animates, toast appears, timeline entry animates in
 
 ### Flow 2: Create Custom Container
-1. User navigates to Containers screen
-2. Taps add button (+)
-3. Modal appears with form
-4. Enters name (e.g., "750ml Steel Bottle")
-5. Enters capacity (e.g., 750)
-6. Selects emoji (e.g., 🍾)
-7. Taps save
-8. Container appears in list and on Home screen
+1. Containers tab → + button
+2. Bottom sheet form → save
+3. Chip appears on Home quick-add row
 
-### Flow 3: View Analytics
-1. User navigates to Analytics screen
-2. Selects time period (Day, Week, Month, Year)
-3. Views chart and summary stats
-4. Can navigate between periods using arrows
+### Flow 3: Undo
+1. Tap "Undo last sip" on hero card
+2. Entry removed, ring animates back, toast confirms
 
-### Flow 4: Undo Recent Entry
-1. User on Home screen
-2. Realizes they logged water twice
-3. Taps undo button on last entry
-4. Entry removed from timeline
-5. Progress ring updates
+## Color Tokens (`theme.config.js`)
 
-## Color Choices
+| Token | Light | Dark |
+|-------|-------|------|
+| primary | #3B9FD9 | #5BB8E8 |
+| accent | #7DD3FC | #38BDF8 |
+| background | #F8FAFC | #0F1419 |
+| surface | #FFFFFF | #1A2229 |
+| surfaceElevated | #FFFFFF | #232D36 |
+| ringTrack | #E0F2FE | #1E3A4F |
+| success | #10B981 | #34D399 |
 
-**Brand Colors** (calm, light, playful):
-- **Primary**: #0A7EA4 (soft blue, hydration theme)
-- **Background**: #FFFFFF (light mode) / #151718 (dark mode)
-- **Surface**: #F5F5F5 (light mode) / #1E2022 (dark mode)
-- **Foreground**: #11181C (light mode) / #ECEDEE (dark mode)
-- **Muted**: #687076 (light mode) / #9BA1A6 (dark mode)
-- **Success**: #22C55E (positive feedback)
-- **Border**: #E5E7EB (light mode) / #334155 (dark mode)
+## Shared Components (`components/hydration/`)
 
-**Accent Colors**:
-- Water/Hydration: Shades of blue (#0A7EA4, #4A9FBF)
-- Positive Actions: Green (#22C55E)
-- Warnings: Orange (#F59E0B)
-
-## Typography & Spacing
-
-- **Headings**: Bold, 24-32px
-- **Body**: Regular, 14-16px
-- **Captions**: Muted, 12-14px
-- **Spacing**: 8px, 12px, 16px, 24px grid
-
-## Key UI Components
-
-1. **Progress Ring**: Circular progress indicator showing goal completion
-2. **Container Cards**: Rounded, tappable cards with name, capacity, emoji
-3. **Timeline Entry**: Row with timestamp, container name, amount, delete button
-4. **Chart**: Simple bar chart for analytics
-5. **Buttons**: Large tap targets (48px+ height), rounded corners
-6. **Modals**: Full-screen or bottom-sheet for forms
+| Component | Role |
+|-----------|------|
+| HydrationProgressRing | SVG arc + Reanimated stroke |
+| HydrationHero | Ring + hero copy + undo |
+| ContainerQuickAdd | Horizontal chips |
+| LogSheet | Custom amount bottom sheet |
+| LogTimeline | Animated log list |
+| ToastBanner | Ephemeral feedback |
+| SegmentedControl | Animated pill selector |
+| BottomSheet | Slide-up modal shell |
+| ContainerFormSheet | Container CRUD form |
+| AnimatedBarChart | Analytics bars |
+| StatCard | Metric display |
+| SettingsSection / SettingsRow | Grouped settings |
 
 ## Animations & Feedback
 
-- **Container Tap**: Scale 0.97, haptic feedback (light)
-- **Entry Added**: Slide-in animation from bottom, success haptic
-- **Progress Update**: Smooth ring fill animation
-- **Undo**: Fade-out animation
-- **Theme Switch**: Fade transition
+- Container tap: scale spring + light haptic + ring spring + toast
+- Timeline: FadeInDown + Layout
+- Goal reached: success haptic + green toast
+- Undo/delete: medium/light haptic + toast
+- Chart bars: spring height on period change
+- Segmented control: sliding indicator spring
 
-## Microcopy & Tone
+## Microcopy
 
-- "Sip logged" — after logging water
-- "Nice, you hydrated!" — when goal reached
-- "Tiny win" — encouraging message
-- "Goal completed! 🎉" — celebration
-- "Your bottle says thanks" — playful message
+- "Sip logged", "Tiny win", "Hydration boost", "Nice sip" (random on log)
+- "Goal completed!" (on reaching daily goal)
+- "Goal complete" / "Nice, you hydrated!" (hero when done)
 
-## Responsive Design
+## Tab Bar
 
-- **Portrait Orientation**: 9:16 aspect ratio (mobile standard)
-- **One-Handed Usage**: All interactive elements within thumb reach
-- **Safe Area**: Handles notch, home indicator, tab bar
-- **Tablet Support**: Optional, scales gracefully
+- Slimmer bar, elevated surface background, 24px icons
+- Labels: Home, Containers, Stats, Settings
 
-## Future Enhancements (Post-MVP)
+## Future Enhancements
 
-- Hydration reminders (notifications)
+- Hydration reminders
 - Streaks and achievements
-- Home screen widget
-- Export history (CSV/PDF)
-- Dark mode toggle
-- Sound or haptic feedback customization
-- Deeper insights and trends
-- Sync with health apps (Apple Health, Google Fit)
+- Widgets
+- Health app sync
+- Custom sound/haptic profiles

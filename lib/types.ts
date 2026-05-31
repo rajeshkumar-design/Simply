@@ -21,6 +21,8 @@ export interface UserSettings {
   daily_goal_ml: number;
   unit_preference: 'ml' | 'oz'; // ml or oz
   theme: 'light' | 'dark' | 'auto';
+  wake_time?: string | null;
+  sleep_time?: string | null;
 }
 
 export interface DailyStats {

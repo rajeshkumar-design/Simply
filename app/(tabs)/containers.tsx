@@ -1,41 +1,40 @@
-import { ScrollView, Text, View, Pressable, FlatList, TextInput, Modal, ActivityIndicator } from "react-native";
-import { useState } from "react";
-import { ScreenContainer } from "@/components/screen-container";
-import { useHydration } from "@/lib/hydration-context";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useColors } from "@/hooks/use-colors";
-import * as Haptics from "expo-haptics";
-import { v4 as uuidv4 } from "uuid";
-import { Container } from "@/lib/types";
+import { ScrollView, Text, View, Pressable, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { ScreenContainer } from '@/components/screen-container';
+import { useHydration } from '@/lib/hydration-context';
+import { MIcon, MCIcon } from '@/components/ui/MIcon';
+import { useColors } from '@/hooks/use-colors';
+import * as Haptics from 'expo-haptics';
+import type { Container } from '@/lib/types';
+import { ContainerFormSheet, ToastBanner } from '@/components/hydration';
+import type { ContainerFormData } from '@/components/hydration/ContainerFormSheet';
+import { useLogFeedback } from '@/hooks/use-log-feedback';
+import { elevatedCardStyle as cardStyle } from '@/components/hydration/card-styles';
+import { resolveVesselIcon, VESSEL_ICONS } from '@/lib/vessel-icons';
+import { createId } from '@/lib/id';
 
-const EMOJI_OPTIONS = ["🍾", "🥤", "🧃", "☕", "🍵", "🧋", "🥛", "🧉", "💧", "🌊"];
+const DEFAULT_ICON_KEY = VESSEL_ICONS[0].key;
 
-/**
- * Containers Screen - Manage custom drink containers
- * 
- * Allows users to:
- * - View all saved containers
- * - Add new containers
- * - Edit existing containers
- * - Delete containers
- */
 export default function ContainersScreen() {
+  const router = useRouter();
   const colors = useColors();
   const { state, addContainer, updateContainer, deleteContainer } = useHydration();
   const { containers, isLoading } = state;
+  const { toast, dismissToast, showToast } = useLogFeedback();
 
-  const [showModal, setShowModal] = useState(false);
+  const [showSheet, setShowSheet] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    capacity: "",
-    emoji: "🥤",
+  const [formData, setFormData] = useState<ContainerFormData>({
+    name: '',
+    capacity: '',
+    emoji: DEFAULT_ICON_KEY,
   });
 
   const handleAddPress = () => {
     setEditingId(null);
-    setFormData({ name: "", capacity: "", emoji: "🥤" });
-    setShowModal(true);
+    setFormData({ name: '', capacity: '250', emoji: DEFAULT_ICON_KEY });
+    setShowSheet(true);
   };
 
   const handleEditPress = (container: Container) => {
@@ -45,23 +44,20 @@ export default function ContainersScreen() {
       capacity: container.capacity_ml.toString(),
       emoji: container.emoji,
     });
-    setShowModal(true);
+    setShowSheet(true);
   };
 
   const handleDeletePress = async (id: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await deleteContainer(id);
+    showToast('Container removed');
   };
 
   const handleSave = async () => {
-    if (!formData.name.trim() || !formData.capacity.trim()) {
-      return;
-    }
+    if (!formData.name.trim() || !formData.capacity.trim()) return;
 
     const capacity = parseInt(formData.capacity, 10);
-    if (isNaN(capacity) || capacity <= 0) {
-      return;
-    }
+    if (isNaN(capacity) || capacity <= 0) return;
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
@@ -71,213 +67,119 @@ export default function ContainersScreen() {
         capacity_ml: capacity,
         emoji: formData.emoji,
       });
+      showToast('Container updated');
     } else {
       const newContainer: Container = {
-        id: uuidv4(),
+        id: createId('container'),
         name: formData.name,
         capacity_ml: capacity,
         emoji: formData.emoji,
         created_at: Date.now(),
       };
       await addContainer(newContainer);
+      showToast('Container created');
     }
 
-    setShowModal(false);
+    setShowSheet(false);
   };
 
   if (isLoading) {
     return (
       <ScreenContainer className="items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={colors.accent} />
       </ScreenContainer>
     );
   }
 
   return (
-    <ScreenContainer className="p-4">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-        <View className="gap-4">
-          {/* Header */}
-          <View className="flex-row items-center justify-between">
-            <View className="gap-1">
-              <Text className="text-2xl font-bold text-foreground">My Containers</Text>
+    <ScreenContainer className="px-4">
+      <ToastBanner toast={toast} onDismiss={dismissToast} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        <View className="gap-5">
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={10}
+            className="w-10 h-10 rounded-full items-center justify-center -ml-2 mt-1"
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+          >
+            <MIcon name="arrow-back" size={24} color={colors.foreground} />
+          </Pressable>
+
+          <View className="flex-row items-center justify-between px-1">
+            <View className="gap-0.5">
+              <Text className="text-3xl font-extrabold text-foreground">Containers</Text>
               <Text className="text-sm text-muted">{containers.length} saved</Text>
             </View>
             <Pressable
               onPress={handleAddPress}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: colors.primary,
-                  opacity: pressed ? 0.8 : 1,
-                  transform: [{ scale: pressed ? 0.95 : 1 }],
-                },
-              ]}
-              className="w-12 h-12 rounded-full items-center justify-center"
+              style={({ pressed }) => ({
+                backgroundColor: colors.primary,
+                opacity: pressed ? 0.85 : 1,
+                transform: [{ scale: pressed ? 0.94 : 1 }],
+              })}
+              className="w-11 h-11 rounded-full items-center justify-center"
             >
-              <IconSymbol name="plus" size={24} color="white" />
+              <MIcon name="add" size={22} color={colors.background} />
             </Pressable>
           </View>
 
-          {/* Containers List */}
           {containers.length > 0 ? (
-            <FlatList
-              data={containers}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              renderItem={({ item }) => (
-                <View className="bg-surface rounded-2xl p-4 mb-3 border border-border flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3 flex-1">
-                    <Text className="text-4xl">{item.emoji}</Text>
-                    <View className="flex-1">
-                      <Text className="text-base font-semibold text-foreground">
-                        {item.name}
-                      </Text>
-                      <Text className="text-sm text-muted">
-                        {item.capacity_ml} ml
-                      </Text>
-                    </View>
+            <View className="flex-row flex-wrap gap-3">
+              {containers.map((item) => (
+                <View
+                  key={item.id}
+                  className="rounded-2xl p-4 bg-surfaceElevated"
+                  style={[{ width: '47%' }, cardStyle()]}
+                >
+                  <View
+                    className="w-12 h-12 rounded-full items-center justify-center mb-2"
+                    style={{ backgroundColor: colors.ringTrack }}
+                  >
+                    <MCIcon name={resolveVesselIcon(item.emoji)} size={26} color={colors.accent} />
                   </View>
-                  <View className="flex-row gap-2">
-                    <Pressable
-                      onPress={() => handleEditPress(item)}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
-                    >
-                      <IconSymbol name="square.and.pencil" size={20} color={colors.primary} />
+                  <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text className="text-sm text-muted mt-0.5">{item.capacity_ml} ml</Text>
+                  <View className="flex-row gap-3 mt-3">
+                    <Pressable onPress={() => handleEditPress(item)} hitSlop={8}>
+                      <MIcon name="edit" size={18} color={colors.accent} />
                     </Pressable>
-                    <Pressable
-                      onPress={() => handleDeletePress(item.id)}
-                      style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1 }]}
-                    >
-                      <IconSymbol name="trash" size={20} color={colors.error} />
+                    <Pressable onPress={() => handleDeletePress(item.id)} hitSlop={8}>
+                      <MIcon name="delete-outline" size={18} color={colors.muted} />
                     </Pressable>
                   </View>
                 </View>
-              )}
-            />
+              ))}
+            </View>
           ) : (
-            <View className="bg-surface rounded-2xl p-6 items-center gap-3 mt-8">
+            <View className="rounded-2xl p-8 items-center gap-3 mt-4 bg-surfaceElevated" style={cardStyle()}>
               <Text className="text-lg font-semibold text-foreground">No containers yet</Text>
               <Text className="text-sm text-muted text-center">
-                Create your first container to get started with tracking
+                Create bottles and cups for one-tap logging
               </Text>
               <Pressable
                 onPress={handleAddPress}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
                 className="px-6 py-3 rounded-full mt-2"
+                style={{ backgroundColor: colors.primary }}
               >
-                <Text className="text-white font-semibold">Create Container</Text>
+                <Text className="font-semibold" style={{ color: colors.background }}>
+                  Create container
+                </Text>
               </Pressable>
             </View>
           )}
         </View>
       </ScrollView>
 
-      {/* Add/Edit Modal */}
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-background rounded-t-3xl p-6 gap-4">
-            {/* Header */}
-            <View className="flex-row items-center justify-between">
-              <Text className="text-xl font-bold text-foreground">
-                {editingId ? "Edit Container" : "New Container"}
-              </Text>
-              <Pressable onPress={() => setShowModal(false)}>
-                <Text className="text-lg text-muted">✕</Text>
-              </Pressable>
-            </View>
-
-            {/* Emoji Selector */}
-            <View className="gap-2">
-              <Text className="text-sm font-semibold text-muted">Choose emoji</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {EMOJI_OPTIONS.map((emoji) => (
-                  <Pressable
-                    key={emoji}
-                    onPress={() => setFormData({ ...formData, emoji })}
-                    style={({ pressed }) => [
-                      {
-                        backgroundColor: formData.emoji === emoji ? colors.primary : colors.surface,
-                        opacity: pressed ? 0.7 : 1,
-                      },
-                    ]}
-                    className="w-12 h-12 rounded-lg items-center justify-center border border-border"
-                  >
-                    <Text className="text-2xl">{emoji}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            {/* Name Input */}
-            <View className="gap-2">
-              <Text className="text-sm font-semibold text-muted">Container name</Text>
-              <TextInput
-                placeholder="e.g., Steel Bottle"
-                placeholderTextColor={colors.muted}
-                value={formData.name}
-                onChangeText={(text) => setFormData({ ...formData, name: text })}
-                className="bg-surface border border-border rounded-lg p-3 text-foreground"
-                style={{ color: colors.foreground }}
-              />
-            </View>
-
-            {/* Capacity Input */}
-            <View className="gap-2">
-              <Text className="text-sm font-semibold text-muted">Capacity (ml)</Text>
-              <TextInput
-                placeholder="e.g., 750"
-                placeholderTextColor={colors.muted}
-                value={formData.capacity}
-                onChangeText={(text) => setFormData({ ...formData, capacity: text })}
-                keyboardType="number-pad"
-                className="bg-surface border border-border rounded-lg p-3 text-foreground"
-                style={{ color: colors.foreground }}
-              />
-            </View>
-
-            {/* Action Buttons */}
-            <View className="flex-row gap-3 mt-4">
-              <Pressable
-                onPress={() => setShowModal(false)}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.surface,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-                className="flex-1 py-3 rounded-lg items-center border border-border"
-              >
-                <Text className="font-semibold text-foreground">Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSave}
-                disabled={!formData.name.trim() || !formData.capacity.trim()}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.primary,
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
-                className="flex-1 py-3 rounded-lg items-center"
-              >
-                <Text className="font-semibold text-white">
-                  {editingId ? "Update" : "Create"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ContainerFormSheet
+        visible={showSheet}
+        editing={!!editingId}
+        formData={formData}
+        onChange={setFormData}
+        onClose={() => setShowSheet(false)}
+        onSave={handleSave}
+      />
     </ScreenContainer>
   );
 }

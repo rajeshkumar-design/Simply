@@ -1,61 +1,20 @@
-import { Tabs } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Tabs } from 'expo-router';
 
-import { HapticTab } from "@/components/haptic-tab";
-import { IconSymbol } from "@/components/ui/icon-symbol";
-import { Platform } from "react-native";
-import { useColors } from "@/hooks/use-colors";
-
+// The traditional tab bar is hidden in favor of the Me+ style floating
+// navigation rendered inside the Home screen. The Tabs shell is kept because
+// Expo Router requires it for the route group, but the bar itself is invisible.
 export default function TabLayout() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
-  const tabBarHeight = 56 + bottomPadding;
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarStyle: {
-          paddingTop: 8,
-          paddingBottom: bottomPadding,
-          height: tabBarHeight,
-          backgroundColor: colors.background,
-          borderTopColor: colors.border,
-          borderTopWidth: 0.5,
-        },
+        tabBarStyle: { display: 'none' },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="containers"
-        options={{
-          title: "Containers",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="drop.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: "Analytics",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "Settings",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gear" color={color} />,
-        }}
-      />
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="containers" />
+      <Tabs.Screen name="analytics" />
+      <Tabs.Screen name="settings" />
     </Tabs>
   );
 }
