@@ -28,7 +28,7 @@ export function useAuth(options?: UseAuthOptions) {
   const [error, setError] = useState<Error | null>(null);
 
   const setUser = useCallback((nextUser: Auth.User | null) => {
-    publishAuth(nextUser, false);
+    publishAuth(nextUser, globalLoading);
   }, []);
 
   const setLoading = useCallback((nextLoading: boolean) => {
